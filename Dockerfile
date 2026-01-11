@@ -19,7 +19,7 @@ ENV GOEXPERIMENT=greenteagc
 WORKDIR /build
 
 ADD go.mod go.sum ./
-RUN go mod download
+RUN go mod download && go mod tidy
 
 COPY . .
 COPY --from=builder /build/dist ./web/dist

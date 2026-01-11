@@ -33,6 +33,7 @@ import {
   Palette,
   CreditCard,
   Server,
+  HardDrive,
 } from 'lucide-react';
 
 import SystemSetting from '../../components/settings/SystemSetting';
@@ -47,6 +48,7 @@ import ChatsSetting from '../../components/settings/ChatsSetting';
 import DrawingSetting from '../../components/settings/DrawingSetting';
 import PaymentSetting from '../../components/settings/PaymentSetting';
 import ModelDeploymentSetting from '../../components/settings/ModelDeploymentSetting';
+import ObjectStorageSetting from '../../components/settings/ObjectStorageSetting';
 
 const Setting = () => {
   const { t } = useTranslation();
@@ -145,6 +147,16 @@ const Setting = () => {
       ),
       content: <ModelDeploymentSetting />,
       itemKey: 'model-deployment',
+    });
+    panes.push({
+      tab: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <HardDrive size={18} />
+          {t('对象存储设置')}
+        </span>
+      ),
+      content: <ObjectStorageSetting />,
+      itemKey: 'object-storage',
     });
     panes.push({
       tab: (

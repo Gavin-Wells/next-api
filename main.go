@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/router"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	storageService "github.com/QuantumNous/new-api/service/storage"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-contrib/sessions"
@@ -263,5 +264,13 @@ func InitResources() error {
 	if err != nil {
 		return err
 	}
+
+	// Initialize Object Storage
+	err = storageService.InitStorage()
+	if err != nil {
+		common.SysError(fmt.Sprintf("failed to initialize object storage: %v", err))
+		// 不阻断启动，仅记录错误
+	}
+
 	return nil
 }

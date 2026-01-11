@@ -45,6 +45,10 @@ require (
 	github.com/tidwall/sjson v1.2.5
 	github.com/tiktoken-go/tokenizer v0.6.2
 	github.com/yapingcat/gomedia v0.0.0-20240906162731-17feea57090c
+	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
+	github.com/minio/minio-go/v7 v7.0.69
+	github.com/tencentyun/cos-go-sdk-v5 v0.7.47
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.54.2
 	golang.org/x/crypto v0.45.0
 	golang.org/x/image v0.23.0
 	golang.org/x/net v0.47.0

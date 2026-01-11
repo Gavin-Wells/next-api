@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	storageService "github.com/QuantumNous/new-api/service/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -76,7 +78,35 @@ func VideoProxy(c *gin.Context) {
 		baseURL = "https://api.openai.com"
 	}
 
+	// 优先检查是否有对象存储URL
 	var videoURL string
+	var useObjectStorage bool
+	if storageService.IsStorageEnabled() {
+		var taskData map[string]interface{}
+		if err := json.Unmarshal(task.Data, &taskData); err == nil {
+			if storageURL, ok := taskData["storage_url"].(string); ok && storageURL != "" {
+				videoURL = storageURL
+				useObjectStorage = true
+				logger.LogDebug(c.Request.Context(), fmt.Sprintf("Using object storage URL for task %s: %s", taskID, storageURL))
+			}
+		}
+	}
+
+	// 如果没有对象存储URL，从原始URL获取
+	if !useObjectStorage {
+		videoURL = task.FailReason // 原始视频URL存储在FailReason字段中
+	}
+
+	// 如果使用对象存储且配置了自定义域名，直接重定向到对象存储URL
+	if useObjectStorage && videoURL != "" {
+		config := storageService.GetStorageConfig()
+		if config != nil && config.Domain != "" {
+			// 如果有自定义域名（通常是CDN），直接重定向
+			c.Redirect(http.StatusFound, videoURL)
+			return
+		}
+	}
+
 	proxy := channel.GetSetting().Proxy
 	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {
@@ -104,7 +134,9 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	switch channel.Type {
+	// 如果使用对象存储，不需要添加额外的header，直接从对象存储获取
+	if !useObjectStorage {
+		switch channel.Type {
 	case constant.ChannelTypeGemini:
 		apiKey := task.PrivateData.Key
 		if apiKey == "" {
@@ -130,12 +162,15 @@ func VideoProxy(c *gin.Context) {
 			return
 		}
 		req.Header.Set("x-goog-api-key", apiKey)
-	case constant.ChannelTypeOpenAI, constant.ChannelTypeSora:
-		videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.TaskID)
-		req.Header.Set("Authorization", "Bearer "+channel.Key)
-	default:
-		// Video URL is directly in task.FailReason
-		videoURL = task.FailReason
+		case constant.ChannelTypeOpenAI, constant.ChannelTypeSora:
+			videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.TaskID)
+			req.Header.Set("Authorization", "Bearer "+channel.Key)
+		default:
+			// Video URL is directly in task.FailReason
+			if videoURL == "" {
+				videoURL = task.FailReason
+			}
+		}
 	}
 
 	req.URL, err = url.Parse(videoURL)

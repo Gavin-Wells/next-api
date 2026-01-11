@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	storageService "github.com/QuantumNous/new-api/service/storage"
 )
 
 func UpdateVideoTaskAll(ctx context.Context, platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*model.Task) error {
@@ -147,6 +148,37 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		}
 		if !(len(taskResult.Url) > 5 && taskResult.Url[:5] == "data:") {
 			task.FailReason = taskResult.Url
+		}
+
+		// 如果启用了对象存储且配置了自动上传，则上传视频到对象存储
+		if storageService.IsStorageEnabled() {
+			config := storageService.GetStorageConfig()
+			if config != nil && config.AutoUpload && taskResult.Url != "" && len(taskResult.Url) > 5 && taskResult.Url[:5] != "data:" {
+				go func() {
+					// 异步上传，避免阻塞任务更新流程
+					storageURL, err := storageService.UploadVideoFromURL(ctx, taskResult.Url, task.TaskID)
+					if err != nil {
+						logger.LogError(ctx, fmt.Sprintf("Failed to upload video to object storage for task %s: %v", task.TaskID, err))
+					} else {
+						logger.LogInfo(ctx, fmt.Sprintf("Video uploaded to object storage for task %s: %s", task.TaskID, storageURL))
+						// 更新任务数据，保存对象存储URL
+						var taskData map[string]interface{}
+						if err := json.Unmarshal(task.Data, &taskData); err != nil {
+							taskData = make(map[string]interface{})
+						}
+						taskData["storage_url"] = storageURL
+						taskData["original_url"] = taskResult.Url
+						updatedData, err := json.Marshal(taskData)
+						if err == nil {
+							task.Data = updatedData
+							// 更新数据库中的对象存储URL
+							if updateErr := task.Update(); updateErr != nil {
+								logger.LogError(ctx, fmt.Sprintf("Failed to update task with storage URL: %v", updateErr))
+							}
+						}
+					}
+				}()
+			}
 		}
 
 		// 如果返回了 total_tokens 并且配置了模型倍率(非固定价格),则重新计费

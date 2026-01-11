@@ -12,11 +12,12 @@
 #
 # ⚠️  IMPORTANT: Change all default passwords before deploying to production!
 
-version: '3.4' # For compatibility with older Docker versions
-
 services:
   new-api:
-    image: calciumion/new-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: new-api:latest
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
@@ -38,6 +39,16 @@ services:
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX  # Google Analytics 的测量 ID (Google Analytics Measurement ID)
 #      - UMAMI_WEBSITE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # Umami 网站 ID (Umami Website ID)
 #      - UMAMI_SCRIPT_URL=https://analytics.umami.is/script.js  # Umami 脚本 URL，默认为官方地址 (Umami Script URL, defaults to official URL)
+#      # 对象存储配置 (Object Storage Configuration)
+#      - OBJECT_STORAGE_TYPE=minio  # none(禁用), oss(阿里云), cos(腾讯云), s3(AWS S3), minio(MinIO)
+#      - OBJECT_STORAGE_ENDPOINT=oss.zhijiucity.com:51012
+#      - OBJECT_STORAGE_ACCESS_KEY_ID=pX3ON8gUhfwrHfbee8t8
+#      - OBJECT_STORAGE_ACCESS_KEY_SECRET=m5IGYfsQOlXcxXWuYDQbK7CUIvAqAulr2UmVIlTH
+#      - OBJECT_STORAGE_BUCKET_NAME=your-bucket-name
+#      - OBJECT_STORAGE_REGION=
+#      - OBJECT_STORAGE_USE_SSL=true
+#      - OBJECT_STORAGE_BASE_PATH=videos/
+#      - OBJECT_STORAGE_AUTO_UPLOAD=true
 
     depends_on:
       - redis
