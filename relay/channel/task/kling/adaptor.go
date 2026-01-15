@@ -248,24 +248,59 @@ func (a *TaskAdaptor) GetChannelName() string {
 // ============================
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {
+	// 统一获取时长
+	duration := req.GetDuration(5)
+
+	// 统一获取宽高比
+	aspectRatio := req.GetAspectRatio("")
+	if aspectRatio == "" {
+		aspectRatio = a.getAspectRatio(req.Size)
+	}
+
+	// 统一获取首帧图片
+	image := req.GetFirstFrameImage()
+	if image == "" {
+		image = req.Image
+	}
+
+	// 统一获取模式
+	mode := req.Mode
+	if mode == "" {
+		mode = "std"
+	}
+
+	// 统一获取 cfg_scale
+	cfgScale := req.CfgScale
+	if cfgScale == 0 {
+		cfgScale = 0.5
+	}
+
 	r := requestPayload{
 		Prompt:         req.Prompt,
-		Image:          req.Image,
-		Mode:           defaultString(req.Mode, "std"),
-		Duration:       fmt.Sprintf("%d", defaultInt(req.Duration, 5)),
-		AspectRatio:    a.getAspectRatio(req.Size),
+		Image:          image,
+		Mode:           mode,
+		Duration:       fmt.Sprintf("%d", duration),
+		AspectRatio:    aspectRatio,
 		ModelName:      req.Model,
 		Model:          req.Model, // Keep consistent with model_name, double writing improves compatibility
-		CfgScale:       0.5,
+		CfgScale:       cfgScale,
 		StaticMask:     "",
 		DynamicMasks:   []DynamicMask{},
 		CameraControl:  nil,
 		CallbackUrl:    "",
 		ExternalTaskId: "",
 	}
+
+	// 处理反向提示词
+	if req.NegativePrompt != "" {
+		r.NegativePrompt = req.NegativePrompt
+	}
+
 	if r.ModelName == "" {
 		r.ModelName = "kling-v1"
 	}
+
+	// 从 metadata 中获取额外参数（兼容旧方式）
 	metadata := req.Metadata
 	medaBytes, err := json.Marshal(metadata)
 	if err != nil {

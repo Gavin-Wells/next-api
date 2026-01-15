@@ -36,6 +36,8 @@ export const API_ENDPOINTS = [
   '/v1/audio/speech',
   '/v1/audio/transcriptions',
   '/v1/audio/translations',
+  '/v1/video/generations',
+  '/v1/videos',
 ];
 
 export const TASK_ACTION_GENERATE = 'generate';

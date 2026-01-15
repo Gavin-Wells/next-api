@@ -14,6 +14,15 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
+	taskkling "github.com/QuantumNous/new-api/relay/channel/task/kling"
+	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
+	taskvidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
+	taskhailuo "github.com/QuantumNous/new-api/relay/channel/task/hailuo"
+	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
+	taskali "github.com/QuantumNous/new-api/relay/channel/task/ali"
+	taskgemini "github.com/QuantumNous/new-api/relay/channel/task/gemini"
+	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -87,6 +96,87 @@ func init() {
 			OwnedBy: "midjourney",
 		})
 	}
+	// Load task adaptor models (video generation models)
+	// These are not loaded by GetAdaptor() because they use TaskAdaptor instead
+	// Models exported as variables
+	for _, modelName := range taskdoubao.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskdoubao.ChannelName,
+		})
+	}
+	for _, modelName := range tasksora.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: tasksora.ChannelName,
+		})
+	}
+	for _, modelName := range taskhailuo.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskhailuo.ChannelName,
+		})
+	}
+	for _, modelName := range taskali.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskali.ChannelName,
+		})
+	}
+	// Models exported as methods (need to create adaptor instance)
+	klingAdaptor := &taskkling.TaskAdaptor{}
+	for _, modelName := range klingAdaptor.GetModelList() {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: klingAdaptor.GetChannelName(),
+		})
+	}
+	viduAdaptor := &taskvidu.TaskAdaptor{}
+	for _, modelName := range viduAdaptor.GetModelList() {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: viduAdaptor.GetChannelName(),
+		})
+	}
+	jimengAdaptor := &taskjimeng.TaskAdaptor{}
+	for _, modelName := range jimengAdaptor.GetModelList() {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: jimengAdaptor.GetChannelName(),
+		})
+	}
+	geminiAdaptor := &taskgemini.TaskAdaptor{}
+	for _, modelName := range geminiAdaptor.GetModelList() {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: geminiAdaptor.GetChannelName(),
+		})
+	}
+	vertexAdaptor := &taskvertex.TaskAdaptor{}
+	for _, modelName := range vertexAdaptor.GetModelList() {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: vertexAdaptor.GetChannelName(),
+		})
+	}
 	openAIModelsMap = make(map[string]dto.OpenAIModels)
 	for _, aiModel := range openAIModels {
 		openAIModelsMap[aiModel.Id] = aiModel
@@ -94,15 +184,26 @@ func init() {
 	channelId2Models = make(map[int][]string)
 	for i := 1; i <= constant.ChannelTypeDummy; i++ {
 		apiType, success := common.ChannelType2APIType(i)
-		if !success || apiType == constant.APITypeAIProxyLibrary {
-			continue
-		}
+		if success && apiType != constant.APITypeAIProxyLibrary {
 		meta := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType: i,
 		}}
 		adaptor := relay.GetAdaptor(apiType)
+			if adaptor != nil {
 		adaptor.Init(meta)
 		channelId2Models[i] = adaptor.GetModelList()
+				continue
+			}
+		}
+		// Try task adaptor for video generation channels
+		taskAdaptor := relay.GetTaskAdaptor(constant.TaskPlatform(fmt.Sprintf("%d", i)))
+		if taskAdaptor != nil {
+			meta := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+				ChannelType: i,
+			}}
+			taskAdaptor.Init(meta)
+			channelId2Models[i] = taskAdaptor.GetModelList()
+		}
 	}
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id

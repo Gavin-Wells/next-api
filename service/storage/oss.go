@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -89,7 +88,7 @@ func (p *OSSProvider) GetURL(ctx context.Context, key string, expiresIn int64) (
 		if expiresIn <= 0 {
 			expiresIn = p.config.PresignedURLExpires
 		}
-		signedURL, err := p.bucket.SignURL(objectKey, oss.HTTPGet, time.Duration(expiresIn)*time.Second)
+		signedURL, err := p.bucket.SignURL(objectKey, oss.HTTPGet, expiresIn)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate signed URL: %w", err)
 		}
@@ -132,7 +131,13 @@ func (p *OSSProvider) GetSize(ctx context.Context, key string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to get object meta: %w", err)
 	}
-	return props.ContentLength, nil
+	contentLengthStr := props.Get("Content-Length")
+	if contentLengthStr == "" {
+		return 0, fmt.Errorf("Content-Length header not found")
+	}
+	var contentLength int64
+	fmt.Sscanf(contentLengthStr, "%d", &contentLength)
+	return contentLength, nil
 }
 
 // GetProviderName 获取提供者名称

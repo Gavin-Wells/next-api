@@ -77,6 +77,10 @@ const ModelTestModal = ({
       label: t('图像生成') + ' (/v1/images/generations)',
     },
     { value: 'embeddings', label: 'Embeddings (/v1/embeddings)' },
+    {
+      value: 'openai-video',
+      label: t('视频生成') + ' (/v1/video/generations)',
+    },
   ];
 
   const handleCopySelected = () => {

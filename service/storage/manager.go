@@ -3,13 +3,11 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/service"
 )

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -252,11 +251,31 @@ func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) 
 }
 
 func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relaycommon.TaskSubmitReq) (*AliVideoRequest, error) {
+	// 统一获取首帧图片（映射到 img_url）
+	imgURL := req.GetFirstFrameImage()
+	if imgURL == "" {
+		imgURL = req.InputReference
+	}
+
+	// 处理首尾帧图片
+	firstFrameURL := req.FirstFrame
+	lastFrameURL := req.GetLastFrameImage()
+
+	// 处理反向提示词
+	negativePrompt := req.NegativePrompt
+
+	// 处理音频 URL
+	audioURL := req.AudioUrl
+
 	aliReq := &AliVideoRequest{
 		Model: req.Model,
 		Input: AliVideoInput{
-			Prompt: req.Prompt,
-			ImgURL: req.InputReference,
+			Prompt:         req.Prompt,
+			ImgURL:         imgURL,
+			FirstFrameURL:  firstFrameURL,
+			LastFrameURL:   lastFrameURL,
+			NegativePrompt: negativePrompt,
+			AudioURL:       audioURL,
 		},
 		Parameters: &AliVideoParameters{
 			PromptExtend: true, // 默认开启智能改写
@@ -264,21 +283,26 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		},
 	}
 
-	// 处理分辨率映射
-	if req.Size != "" {
-		// text to video size must be contained *
-		if strings.Contains(req.Model, "t2v") && !strings.Contains(req.Size, "*") {
-			return nil, fmt.Errorf("invalid size: %s, example: %s", req.Size, "1920*1080")
+	// 处理分辨率映射 - 使用统一方法
+	resolution := req.GetResolution("")
+	if resolution != "" || req.Size != "" {
+		size := req.Size
+		if resolution != "" {
+			size = resolution
 		}
-		if strings.Contains(req.Size, "*") {
-			aliReq.Parameters.Size = req.Size
+		// text to video size must be contained *
+		if strings.Contains(req.Model, "t2v") && !strings.Contains(size, "*") {
+			return nil, fmt.Errorf("invalid size: %s, example: %s", size, "1920*1080")
+		}
+		if strings.Contains(size, "*") {
+			aliReq.Parameters.Size = size
 		} else {
-			resolution := strings.ToUpper(req.Size)
+			res := strings.ToUpper(size)
 			// 支持 480p, 720p, 1080p 或 480P, 720P, 1080P
-			if !strings.HasSuffix(resolution, "P") {
-				resolution = resolution + "P"
+			if !strings.HasSuffix(res, "P") {
+				res = res + "P"
 			}
-			aliReq.Parameters.Resolution = resolution
+			aliReq.Parameters.Resolution = res
 		}
 	} else {
 		// 根据模型设置默认分辨率
@@ -305,21 +329,15 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		}
 	}
 
-	// 处理时长
-	if req.Duration > 0 {
-		aliReq.Parameters.Duration = req.Duration
-	} else if req.Seconds != "" {
-		seconds, err := strconv.Atoi(req.Seconds)
-		if err != nil {
-			return nil, errors.Wrap(err, "convert seconds to int failed")
-		} else {
-			aliReq.Parameters.Duration = seconds
-		}
-	} else {
-		aliReq.Parameters.Duration = 5 // 默认5秒
+	// 处理时长 - 使用统一方法
+	aliReq.Parameters.Duration = req.GetDuration(5)
+
+	// 处理 seed
+	if req.Seed > 0 {
+		aliReq.Parameters.Seed = int(req.Seed)
 	}
 
-	// 从 metadata 中提取额外参数
+	// 从 metadata 中提取额外参数（兼容旧方式）
 	if req.Metadata != nil {
 		if metadataBytes, err := common.Marshal(req.Metadata); err == nil {
 			err = common.Unmarshal(metadataBytes, aliReq)

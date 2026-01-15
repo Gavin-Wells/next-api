@@ -34,7 +34,9 @@ type requestPayload struct {
 	Seed              int      `json:"seed,omitempty"`
 	Resolution        string   `json:"resolution,omitempty"`
 	MovementAmplitude string   `json:"movement_amplitude,omitempty"`
+	Style             string   `json:"style,omitempty"`   // 风格: general, anime
 	Bgm               bool     `json:"bgm,omitempty"`
+	OffPeak           bool     `json:"off_peak,omitempty"` // 错峰生成
 	Payload           string   `json:"payload,omitempty"`
 	CallbackUrl       string   `json:"callback_url,omitempty"`
 }
@@ -224,15 +226,42 @@ func (a *TaskAdaptor) GetChannelName() string {
 // ============================
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {
+	// 统一获取时长
+	duration := req.GetDuration(5)
+
+	// 统一获取分辨率
+	resolution := req.GetResolution("1080p")
+
+	// 处理图片参数：统一获取首帧图片
+	images := req.Images
+	if len(images) == 0 {
+		firstFrame := req.GetFirstFrameImage()
+		if firstFrame != "" {
+			images = []string{firstFrame}
+		}
+	}
+
+	// 处理 seed
+	seed := 0
+	if req.Seed > 0 {
+		seed = int(req.Seed)
+	}
+
+	// 处理是否生成音频（映射到 bgm）
+	bgm := req.GetGenerateAudio(false)
+
 	r := requestPayload{
 		Model:             defaultString(req.Model, "viduq1"),
-		Images:            req.Images,
+		Images:            images,
 		Prompt:            req.Prompt,
-		Duration:          defaultInt(req.Duration, 5),
-		Resolution:        defaultString(req.Size, "1080p"),
+		Duration:          duration,
+		Seed:              seed,
+		Resolution:        resolution,
 		MovementAmplitude: "auto",
-		Bgm:               false,
+		Bgm:               bgm,
 	}
+
+	// 从 metadata 中获取额外参数（兼容旧方式）
 	metadata := req.Metadata
 	medaBytes, err := json.Marshal(metadata)
 	if err != nil {

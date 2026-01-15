@@ -145,6 +145,21 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableKeywords"] = operation_setting.AutomaticDisableKeywordsToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
+	// 对象存储配置默认值
+	common.OptionMap["ObjectStorageType"] = "none"
+	common.OptionMap["ObjectStorageEndpoint"] = ""
+	common.OptionMap["ObjectStorageAccessKeyID"] = ""
+	common.OptionMap["ObjectStorageAccessKeySecret"] = ""
+	common.OptionMap["ObjectStorageBucketName"] = ""
+	common.OptionMap["ObjectStorageRegion"] = ""
+	common.OptionMap["ObjectStorageUseSSL"] = "true"
+	common.OptionMap["ObjectStorageBasePath"] = "videos/"
+	common.OptionMap["ObjectStorageDomain"] = ""
+	common.OptionMap["ObjectStoragePresignedURLEnabled"] = "false"
+	common.OptionMap["ObjectStoragePresignedURLExpires"] = "3600"
+	common.OptionMap["ObjectStorageAutoUpload"] = "true"
+	common.OptionMap["ObjectStorageDeleteAfterUpload"] = "false"
+
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
 	for k, v := range modelConfigs {

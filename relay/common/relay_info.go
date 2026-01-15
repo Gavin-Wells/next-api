@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -511,16 +512,42 @@ type TaskRelayInfo struct {
 }
 
 type TaskSubmitReq struct {
-	Prompt         string                 `json:"prompt"`
-	Model          string                 `json:"model,omitempty"`
-	Mode           string                 `json:"mode,omitempty"`
-	Image          string                 `json:"image,omitempty"`
-	Images         []string               `json:"images,omitempty"`
-	Size           string                 `json:"size,omitempty"`
-	Duration       int                    `json:"duration,omitempty"`
-	Seconds        string                 `json:"seconds,omitempty"`
-	InputReference string                 `json:"input_reference,omitempty"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	// === 基础参数 ===
+	Prompt string `json:"prompt"`
+	Model  string `json:"model,omitempty"`
+
+	// === 图片参数（图生视频）===
+	Image          string   `json:"image,omitempty"`           // 单张图片（兼容旧字段）
+	Images         []string `json:"images,omitempty"`          // 多张图片
+	InputReference string   `json:"input_reference,omitempty"` // Sora 专用
+	FirstFrame     string   `json:"first_frame,omitempty"`     // 首帧图片
+	LastFrame      string   `json:"last_frame,omitempty"`      // 尾帧图片
+
+	// === 视频参数 ===
+	Duration    int    `json:"duration,omitempty"`     // 时长（秒）
+	Seconds     string `json:"seconds,omitempty"`      // 时长字符串（兼容 Sora）
+	Size        string `json:"size,omitempty"`         // 尺寸 "1280x720" 或 "768P"
+	AspectRatio string `json:"aspect_ratio,omitempty"` // 比例 "16:9"
+	Resolution  string `json:"resolution,omitempty"`   // 分辨率 "768P", "1080P"
+	Fps         int    `json:"fps,omitempty"`          // 帧率
+
+	// === 生成控制 ===
+	Seed           int64   `json:"seed,omitempty"`            // 随机种子
+	N              int     `json:"n,omitempty"`               // 生成数量
+	Mode           string  `json:"mode,omitempty"`            // 模式 std/fast/pro
+	CfgScale       float64 `json:"cfg_scale,omitempty"`       // CFG 缩放系数
+	NegativePrompt string  `json:"negative_prompt,omitempty"` // 反向提示词
+
+	// === 提示词优化 ===
+	PromptOptimizer  *bool `json:"prompt_optimizer,omitempty"`  // 是否优化提示词
+	FastPretreatment *bool `json:"fast_pretreatment,omitempty"` // 是否快速预处理
+
+	// === 音频参数 ===
+	AudioUrl      string `json:"audio_url,omitempty"`      // 音频 URL
+	GenerateAudio *bool  `json:"generate_audio,omitempty"` // 是否生成音频
+
+	// === 扩展参数 ===
+	Metadata map[string]interface{} `json:"metadata,omitempty"` // 供应商特定参数
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
@@ -529,6 +556,150 @@ func (t *TaskSubmitReq) GetPrompt() string {
 
 func (t *TaskSubmitReq) HasImage() bool {
 	return len(t.Images) > 0
+}
+
+// GetDuration 统一获取时长（秒）
+func (t *TaskSubmitReq) GetDuration(defaultDuration int) int {
+	if t.Duration > 0 {
+		return t.Duration
+	}
+	if t.Seconds != "" {
+		if d, err := strconv.Atoi(t.Seconds); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultDuration
+}
+
+// GetFirstFrameImage 统一获取首帧图片
+func (t *TaskSubmitReq) GetFirstFrameImage() string {
+	if t.FirstFrame != "" {
+		return t.FirstFrame
+	}
+	if t.InputReference != "" {
+		return t.InputReference
+	}
+	if len(t.Images) > 0 {
+		return t.Images[0]
+	}
+	if t.Image != "" {
+		return t.Image
+	}
+	return ""
+}
+
+// GetLastFrameImage 统一获取尾帧图片
+func (t *TaskSubmitReq) GetLastFrameImage() string {
+	if t.LastFrame != "" {
+		return t.LastFrame
+	}
+	if len(t.Images) > 1 {
+		return t.Images[len(t.Images)-1]
+	}
+	return ""
+}
+
+// GetResolution 统一获取分辨率
+// 返回标准化的分辨率字符串，如 "768P", "1080P", "720P"
+func (t *TaskSubmitReq) GetResolution(defaultResolution string) string {
+	// 优先使用 resolution 字段
+	if t.Resolution != "" {
+		return t.Resolution
+	}
+	// 其次解析 size 字段
+	if t.Size != "" {
+		return t.parseResolutionFromSize()
+	}
+	return defaultResolution
+}
+
+// parseResolutionFromSize 从 size 字段解析分辨率
+func (t *TaskSubmitReq) parseResolutionFromSize() string {
+	size := strings.ToLower(t.Size)
+	switch {
+	case strings.Contains(size, "1080"):
+		return "1080P"
+	case strings.Contains(size, "768"):
+		return "768P"
+	case strings.Contains(size, "720"):
+		return "720P"
+	case strings.Contains(size, "512"):
+		return "512P"
+	default:
+		return t.Size
+	}
+}
+
+// GetAspectRatio 统一获取宽高比
+func (t *TaskSubmitReq) GetAspectRatio(defaultRatio string) string {
+	if t.AspectRatio != "" {
+		return t.AspectRatio
+	}
+	// 尝试从 size 解析宽高比
+	if t.Size != "" {
+		if strings.Contains(t.Size, "x") {
+			parts := strings.Split(t.Size, "x")
+			if len(parts) == 2 {
+				w, _ := strconv.Atoi(parts[0])
+				h, _ := strconv.Atoi(parts[1])
+				if w > 0 && h > 0 {
+					return t.calculateAspectRatio(w, h)
+				}
+			}
+		}
+	}
+	return defaultRatio
+}
+
+// calculateAspectRatio 计算宽高比
+func (t *TaskSubmitReq) calculateAspectRatio(width, height int) string {
+	gcd := func(a, b int) int {
+		for b != 0 {
+			a, b = b, a%b
+		}
+		return a
+	}
+	g := gcd(width, height)
+	w, h := width/g, height/g
+	// 标准化常见比例
+	switch {
+	case (w == 16 && h == 9) || (w == 9 && h == 16):
+		return fmt.Sprintf("%d:%d", w, h)
+	case (w == 4 && h == 3) || (w == 3 && h == 4):
+		return fmt.Sprintf("%d:%d", w, h)
+	case w == 1 && h == 1:
+		return "1:1"
+	default:
+		return fmt.Sprintf("%d:%d", w, h)
+	}
+}
+
+// GetSizeWH 获取宽高值
+func (t *TaskSubmitReq) GetSizeWH() (width int, height int) {
+	if t.Size != "" && strings.Contains(t.Size, "x") {
+		parts := strings.Split(t.Size, "x")
+		if len(parts) == 2 {
+			width, _ = strconv.Atoi(parts[0])
+			height, _ = strconv.Atoi(parts[1])
+		}
+	}
+	return
+}
+
+// GetPromptOptimizer 获取是否优化提示词
+func (t *TaskSubmitReq) GetPromptOptimizer(defaultValue bool) bool {
+	if t.PromptOptimizer != nil {
+		return *t.PromptOptimizer
+	}
+	return defaultValue
+}
+
+// GetGenerateAudio 获取是否生成音频
+func (t *TaskSubmitReq) GetGenerateAudio(defaultValue bool) bool {
+	if t.GenerateAudio != nil {
+		return *t.GenerateAudio
+	}
+	return defaultValue
 }
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {

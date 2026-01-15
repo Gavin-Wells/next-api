@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -36,10 +38,21 @@ func NewMinIOProvider(config *StorageConfig) (*MinIOProvider, error) {
 	endpoint := strings.TrimPrefix(config.Endpoint, "https://")
 	endpoint = strings.TrimPrefix(endpoint, "http://")
 
-	client, err := minio.New(endpoint, &minio.Options{
+	options := &minio.Options{
 		Creds:  credentials.NewStaticV4(config.AccessKeyID, config.AccessKeySecret, ""),
 		Secure: config.UseSSL,
-	})
+	}
+
+	// 如果使用 HTTPS，配置允许跳过证书验证（用于自签名证书）
+	if config.UseSSL {
+		options.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // 允许自签名证书
+			},
+		}
+	}
+
+	client, err := minio.New(endpoint, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
 	}
@@ -109,12 +122,19 @@ func (p *MinIOProvider) Exists(ctx context.Context, key string) (bool, error) {
 
 	_, err := p.client.StatObject(ctx, p.config.BucketName, objectKey, minio.StatObjectOptions{})
 	if err != nil {
-		if err.Error() == "The specified key does not exist." {
+		errResp := minio.ToErrorResponse(err)
+		// 对象不存在不是错误
+		if errResp.Code == "NoSuchKey" || strings.Contains(err.Error(), "does not exist") {
 			return false, nil
 		}
 		return false, err
 	}
 	return true, nil
+}
+
+// BucketExists 检查存储桶是否存在（用于连接测试）
+func (p *MinIOProvider) BucketExists(ctx context.Context) (bool, error) {
+	return p.client.BucketExists(ctx, p.config.BucketName)
 }
 
 func (p *MinIOProvider) GetSize(ctx context.Context, key string) (int64, error) {

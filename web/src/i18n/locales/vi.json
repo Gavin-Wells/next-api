@@ -704,6 +704,7 @@
     "固定价格(每次)": "Giá cố định (mỗi lần)",
     "固定价格值": "Giá trị giá cố định",
     "图像生成": "Tạo hình ảnh",
+    "视频生成": "Tạo video",
     "图标": "Biểu tượng",
     "图标使用@lobehub/icons库，如：OpenAI、Claude.Color，支持链式参数：OpenAI.Avatar.type={'platform'}、OpenRouter.Avatar.shape={'square'}，查询所有可用图标请 ": "Biểu tượng sử dụng thư viện @lobehub/icons, như: OpenAI, Claude.Color, hỗ trợ tham số chuỗi: OpenAI.Avatar.type={'platform'}, OpenRouter.Avatar.shape={'square'}, truy vấn tất cả biểu tượng khả dụng vui lòng ",
     "图混合": "Pha trộn",

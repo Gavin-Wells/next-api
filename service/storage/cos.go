@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -51,11 +53,17 @@ func NewCOSProvider(config *StorageConfig) (*COSProvider, error) {
 	if region == "" {
 		region = "ap-shanghai" // 默认区域
 	}
-	bucketURL := fmt.Sprintf("%s://%s.cos.%s.myqcloud.com", scheme, config.BucketName, region)
+	bucketURLStr := fmt.Sprintf("%s://%s.cos.%s.myqcloud.com", scheme, config.BucketName, region)
+	bucketURL, err := url.Parse(bucketURLStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse bucket URL: %w", err)
+	}
 
-	client := cos.NewClient(&cos.BaseURL{BucketURL: bucketURL}, &cos.ClientOptions{
-		SecretID:  config.AccessKeyID,
-		SecretKey: config.AccessKeySecret,
+	client := cos.NewClient(&cos.BaseURL{BucketURL: bucketURL}, &http.Client{
+		Transport: &cos.AuthorizationTransport{
+			SecretID:  config.AccessKeyID,
+			SecretKey: config.AccessKeySecret,
+		},
 	})
 
 	return &COSProvider{

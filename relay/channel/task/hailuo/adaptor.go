@@ -143,13 +143,21 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*VideoRequest, error) {
 	modelConfig := GetModelConfig(req.Model)
-	duration := DefaultDuration
-	if req.Duration > 0 {
-		duration = req.Duration
-	}
-	resolution := modelConfig.DefaultResolution
-	if req.Size != "" {
-		resolution = a.parseResolutionFromSize(req.Size, modelConfig)
+
+	// 统一获取时长
+	duration := req.GetDuration(DefaultDuration)
+
+	// 统一获取分辨率
+	resolution := req.GetResolution(modelConfig.DefaultResolution)
+	// 标准化分辨率格式
+	resolution = a.parseResolutionFromSize(resolution, modelConfig)
+
+	// 1080P 分辨率下，MiniMax-Hailuo-2.3 和 MiniMax-Hailuo-02 只支持 6秒
+	// 参考文档: https://platform.minimaxi.com/docs/api-reference/video-generation-t2v
+	if resolution == Resolution1080P && (req.Model == "MiniMax-Hailuo-2.3" || req.Model == "MiniMax-Hailuo-02") {
+		if duration > 6 {
+			duration = 6
+		}
 	}
 
 	videoRequest := &VideoRequest{
@@ -158,8 +166,28 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		Duration:   &duration,
 		Resolution: resolution,
 	}
+
+	// 处理统一参数：prompt_optimizer, fast_pretreatment
+	if req.PromptOptimizer != nil {
+		videoRequest.PromptOptimizer = req.PromptOptimizer
+	}
+	if req.FastPretreatment != nil {
+		videoRequest.FastPretreatment = req.FastPretreatment
+	}
+
+	// 从 metadata 中解析海螺特定参数（aigc_watermark, callback_url 等）
 	if err := req.UnmarshalMetadata(&videoRequest); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata to video request failed")
+	}
+
+	// 处理图片参数：统一获取首帧图片
+	if videoRequest.FirstFrameImage == "" {
+		videoRequest.FirstFrameImage = req.GetFirstFrameImage()
+	}
+
+	// 处理尾帧图片
+	if videoRequest.LastFrameImage == "" {
+		videoRequest.LastFrameImage = req.GetLastFrameImage()
 	}
 
 	return videoRequest, nil

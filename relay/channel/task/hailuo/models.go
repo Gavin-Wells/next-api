@@ -79,16 +79,23 @@ type FileObject struct {
 	DownloadURL string `json:"download_url"`
 }
 
+// GetModelConfig 获取模型配置
+// 参考文档:
+// - 文生视频: https://platform.minimaxi.com/docs/api-reference/video-generation-t2v
+// - 图生视频: https://platform.minimaxi.com/docs/api-reference/video-generation-i2v
+// - 首尾帧生视频: https://platform.minimaxi.com/docs/api-reference/video-generation-fl2v
 func GetModelConfig(model string) ModelConfig {
 	configs := map[string]ModelConfig{
+		// MiniMax-Hailuo-2.3: 768P 支持 6/10秒，1080P 仅支持 6秒
 		"MiniMax-Hailuo-2.3": {
 			Name:                 "MiniMax-Hailuo-2.3",
 			DefaultResolution:    Resolution768P,
-			SupportedDurations:   []int{6, 10},
+			SupportedDurations:   []int{6, 10}, // 768P: 6/10秒, 1080P: 仅6秒
 			SupportedResolutions: []string{Resolution768P, Resolution1080P},
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  true,
 		},
+		// MiniMax-Hailuo-2.3-Fast: 快速版本（保留兼容）
 		"MiniMax-Hailuo-2.3-Fast": {
 			Name:                 "MiniMax-Hailuo-2.3-Fast",
 			DefaultResolution:    Resolution768P,
@@ -97,22 +104,25 @@ func GetModelConfig(model string) ModelConfig {
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  true,
 		},
+		// MiniMax-Hailuo-02: 768P 支持 6/10秒，1080P 仅支持 6秒
 		"MiniMax-Hailuo-02": {
 			Name:                 "MiniMax-Hailuo-02",
 			DefaultResolution:    Resolution768P,
-			SupportedDurations:   []int{6, 10},
-			SupportedResolutions: []string{Resolution512P, Resolution768P, Resolution1080P},
+			SupportedDurations:   []int{6, 10}, // 768P: 6/10秒, 1080P: 仅6秒
+			SupportedResolutions: []string{Resolution768P, Resolution1080P},
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  true,
 		},
+		// T2V-01-Director: 720P/1080P 均支持 6秒
 		"T2V-01-Director": {
 			Name:                 "T2V-01-Director",
-			DefaultResolution:    Resolution768P,
+			DefaultResolution:    Resolution720P,
 			SupportedDurations:   []int{6},
-			SupportedResolutions: []string{Resolution768P, Resolution1080P},
+			SupportedResolutions: []string{Resolution720P, Resolution1080P},
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  false,
 		},
+		// T2V-01: 仅支持 720P 6秒
 		"T2V-01": {
 			Name:                 "T2V-01",
 			DefaultResolution:    Resolution720P,
@@ -121,6 +131,7 @@ func GetModelConfig(model string) ModelConfig {
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  false,
 		},
+		// I2V-01-Director: 图生视频导演模式
 		"I2V-01-Director": {
 			Name:                 "I2V-01-Director",
 			DefaultResolution:    Resolution720P,
@@ -129,6 +140,7 @@ func GetModelConfig(model string) ModelConfig {
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  false,
 		},
+		// I2V-01-live: 图生视频实时模式
 		"I2V-01-live": {
 			Name:                 "I2V-01-live",
 			DefaultResolution:    Resolution720P,
@@ -137,6 +149,7 @@ func GetModelConfig(model string) ModelConfig {
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  false,
 		},
+		// I2V-01: 图生视频基础版
 		"I2V-01": {
 			Name:                 "I2V-01",
 			DefaultResolution:    Resolution720P,
@@ -145,6 +158,7 @@ func GetModelConfig(model string) ModelConfig {
 			HasPromptOptimizer:   true,
 			HasFastPretreatment:  false,
 		},
+		// S2V-01: 主体参考生成视频
 		"S2V-01": {
 			Name:                 "S2V-01",
 			DefaultResolution:    Resolution720P,

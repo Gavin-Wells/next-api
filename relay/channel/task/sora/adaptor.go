@@ -34,6 +34,7 @@ type ImageURL struct {
 	URL string `json:"url"`
 }
 
+// responseTask 提交任务响应
 type responseTask struct {
 	ID                 string `json:"id"`
 	TaskID             string `json:"task_id,omitempty"` //兼容旧接口
@@ -51,6 +52,23 @@ type responseTask struct {
 		Message string `json:"message"`
 		Code    string `json:"code"`
 	} `json:"error,omitempty"`
+}
+
+// responseTaskStatus 查询任务状态响应 (Sora2 格式)
+type responseTaskStatus struct {
+	TaskID     string `json:"task_id"`
+	Platform   string `json:"platform"`
+	Action     string `json:"action"`
+	Status     string `json:"status"`      // NOT_START, IN_PROGRESS, SUCCESS, FAILURE
+	FailReason string `json:"fail_reason"` // 失败原因
+	SubmitTime int64  `json:"submit_time"`
+	StartTime  int64  `json:"start_time"`
+	FinishTime int64  `json:"finish_time"`
+	Progress   string `json:"progress"` // "100%"
+	Data       *struct {
+		Output string `json:"output"` // 视频 URL
+	} `json:"data"`
+	SearchItem string `json:"search_item"`
 }
 
 // ============================
@@ -93,7 +111,8 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if info.Action == constant.TaskActionRemix {
 		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, info.OriginTaskID), nil
 	}
-	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
+	// Sora2 API 使用 /v2/videos/generations 端点
+	return fmt.Sprintf("%s/v2/videos/generations", a.baseURL), nil
 }
 
 // BuildRequestHeader sets required headers.
@@ -152,7 +171,8 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		return nil, fmt.Errorf("invalid task_id")
 	}
 
-	uri := fmt.Sprintf("%s/v1/videos/%s", baseUrl, taskID)
+	// Sora2 API 使用 /v2/videos/generations/{task_id} 端点
+	uri := fmt.Sprintf("%s/v2/videos/generations/%s", baseUrl, taskID)
 
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
@@ -177,6 +197,13 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	// 尝试解析 Sora2 格式响应
+	resTaskStatus := responseTaskStatus{}
+	if err := common.Unmarshal(respBody, &resTaskStatus); err == nil && resTaskStatus.Status != "" {
+		return a.parseSora2TaskResult(&resTaskStatus), nil
+	}
+
+	// 兼容旧格式响应
 	resTask := responseTask{}
 	if err := common.Unmarshal(respBody, &resTask); err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")
@@ -208,6 +235,40 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 
 	return &taskResult, nil
+}
+
+// parseSora2TaskResult 解析 Sora2 格式的任务状态响应
+func (a *TaskAdaptor) parseSora2TaskResult(res *responseTaskStatus) *relaycommon.TaskInfo {
+	taskResult := &relaycommon.TaskInfo{
+		Code: 0,
+	}
+
+	// Sora2 状态映射：NOT_START, IN_PROGRESS, SUCCESS, FAILURE
+	switch res.Status {
+	case "NOT_START":
+		taskResult.Status = model.TaskStatusQueued
+	case "IN_PROGRESS":
+		taskResult.Status = model.TaskStatusInProgress
+	case "SUCCESS":
+		taskResult.Status = model.TaskStatusSuccess
+		// 视频 URL 在 data.output 字段
+		if res.Data != nil && res.Data.Output != "" {
+			taskResult.Url = res.Data.Output
+		}
+	case "FAILURE":
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Reason = res.FailReason
+	default:
+		// 未知状态，标记为进行中
+		taskResult.Status = model.TaskStatusInProgress
+	}
+
+	// 设置进度
+	if res.Progress != "" {
+		taskResult.Progress = res.Progress
+	}
+
+	return taskResult
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
