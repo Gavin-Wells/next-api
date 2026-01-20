@@ -167,6 +167,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.
 	} else {
 		ratio = modelPrice * groupRatio
 	}
+
+	// 计算参数倍率
+	paramRatio := 1.0
+	if info.TaskRelayInfo != nil && info.TaskRelayInfo.RequestParams != nil {
+		paramRatio = ratio_setting.CalculateParamRatio(modelName, info.TaskRelayInfo.RequestParams)
+		if paramRatio != 1.0 {
+			ratio *= paramRatio
+		}
+	}
+
 	// FIXME: 临时修补，支持任务仅按次计费
 	if !common.StringsContains(constant.TaskPricePatches, modelName) {
 		if len(info.PriceData.OtherRatios) > 0 {
@@ -177,7 +187,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.
 			}
 		}
 	}
-	println(fmt.Sprintf("model: %s, model_price: %.4f, group: %s, group_ratio: %.4f, final_ratio: %.4f", modelName, modelPrice, info.UsingGroup, groupRatio, ratio))
+	println(fmt.Sprintf("model: %s, model_price: %.4f, group: %s, group_ratio: %.4f, param_ratio: %.4f, final_ratio: %.4f", modelName, modelPrice, info.UsingGroup, groupRatio, paramRatio, ratio))
 	userQuota, err := model.GetUserQuota(info.UserId, false)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
@@ -247,6 +257,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.
 				other["group_ratio"] = groupRatio
 				if hasUserGroupRatio {
 					other["user_group_ratio"] = userGroupRatio
+				}
+				if paramRatio != 1.0 {
+					other["param_ratio"] = paramRatio
 				}
 				model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 					ChannelId: info.ChannelId,

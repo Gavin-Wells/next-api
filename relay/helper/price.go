@@ -157,8 +157,45 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) types.
 	priceData := types.PerCallPriceData{
 		ModelPrice:     modelPrice,
 		Quota:          quota,
+		ParamRatio:     1.0,
 		GroupRatioInfo: groupRatioInfo,
 	}
+	return priceData
+}
+
+// ModelPriceHelperPerCallWithParams 带参数倍率的按次计费 PriceHelper
+// params 为请求参数，用于计算参数倍率
+func ModelPriceHelperPerCallWithParams(c *gin.Context, info *relaycommon.RelayInfo, params map[string]interface{}) types.PerCallPriceData {
+	groupRatioInfo := HandleGroupRatio(c, info)
+
+	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
+	// 如果没有配置价格，则使用默认价格
+	if !success {
+		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
+		if !ok {
+			modelPrice = 0.1
+		} else {
+			modelPrice = defaultPrice
+		}
+	}
+
+	// 计算参数倍率
+	paramRatio := ratio_setting.CalculateParamRatio(info.OriginModelName, params)
+
+	// 计算最终额度（包含参数倍率）
+	quota := int(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio * paramRatio)
+	priceData := types.PerCallPriceData{
+		ModelPrice:     modelPrice,
+		Quota:          quota,
+		ParamRatio:     paramRatio,
+		GroupRatioInfo: groupRatioInfo,
+	}
+
+	if common.DebugEnabled {
+		logger.LogDebug(c, fmt.Sprintf("ModelPriceHelperPerCallWithParams: model=%s, modelPrice=%.4f, groupRatio=%.4f, paramRatio=%.4f, quota=%d",
+			info.OriginModelName, modelPrice, groupRatioInfo.GroupRatio, paramRatio, quota))
+	}
+
 	return priceData
 }
 

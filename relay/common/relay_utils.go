@@ -58,6 +58,13 @@ func createTaskError(err error, code string, statusCode int, localError bool) *d
 func storeTaskRequest(c *gin.Context, info *RelayInfo, action string, requestObj TaskSubmitReq) {
 	info.Action = action
 	c.Set("task_request", requestObj)
+
+	// 存储请求参数到 TaskRelayInfo，用于参数倍率计算
+	if info.TaskRelayInfo == nil {
+		info.TaskRelayInfo = &TaskRelayInfo{}
+	}
+	info.TaskRelayInfo.TaskRequest = &requestObj
+	info.TaskRelayInfo.RequestParams = requestObj.ToParamsMap()
 }
 func GetTaskRequest(c *gin.Context) (TaskSubmitReq, error) {
 	v, exists := c.Get("task_request")

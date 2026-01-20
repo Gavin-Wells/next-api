@@ -274,6 +274,9 @@ var defaultModelPrice = map[string]float64{
 	"suno_lyrics":                    0.01,
 	"dall-e-3":                       0.04,
 	"imagen-3.0-generate-002":        0.03,
+	"doubao-seedream-4-0-250828":     0.03,
+	"seedream-4-0-250828":            0.03,
+	"doubao-seedream-4-5-251128":     0.04,
 	"black-forest-labs/flux-1.1-pro": 0.04,
 	"gpt-4-gizmo-*":                  0.1,
 	"mj_video":                       0.8,
@@ -297,6 +300,45 @@ var defaultModelPrice = map[string]float64{
 	"sora-2":                         0.3,
 	"sora-2-pro":                     0.5,
 	"gpt-4o-mini-tts":                0.3,
+	// Doubao Video (豆包视频)
+	"doubao-seedance-1-0-pro-250528":      0.15,
+	"doubao-seedance-1-0-lite-t2v":        0.08,
+	"doubao-seedance-1-0-lite-i2v":        0.08,
+	"doubao-seedance-1-0-pro-fast-251015": 0.12,
+	"doubao-seedance-1-5-pro-251215":      0.20,
+	"doubao-seedance-1-5-pro-i2v":         0.20,
+	"doubao-seedance-1-5-pro-s2e":         0.25,
+	// Hailuo Video (海螺视频)
+	"MiniMax-Hailuo-2.3-Fast": 0.10,
+	"MiniMax-Hailuo-2.3":      0.15,
+	"MiniMax-Hailuo-02":       0.12,
+	"T2V-01-Director":         0.15,
+	"T2V-01":                  0.10,
+	"I2V-01-Director":         0.15,
+	"I2V-01-live":             0.12,
+	"I2V-01":                  0.10,
+	"S2V-01":                  0.12,
+	// Ali Video (万相视频)
+	"wan2.5-i2v-preview": 0.15,
+	"wan2.2-i2v-flash":   0.08,
+	"wan2.2-i2v-plus":    0.15,
+	"wanx2.1-i2v-plus":   0.12,
+	"wanx2.1-i2v-turbo":  0.08,
+	// Kling Video (可灵视频)
+	"kling-v1":        0.15,
+	"kling-v1-6":      0.20,
+	"kling-v2-master": 0.25,
+	// Vidu Video
+	"viduq2":   0.15,
+	"viduq1":   0.12,
+	"vidu2.0":  0.20,
+	"vidu1.5":  0.15,
+	// Gemini Veo Video
+	"veo-3.0-generate-001":       0.20,
+	"veo-3.1-generate-preview":   0.25,
+	"veo-3.1-fast-generate-preview": 0.15,
+	// Jimeng Video (即梦视频)
+	"jimeng_vgfm_t2v_l20": 0.10,
 }
 
 var defaultAudioRatio = map[string]float64{
@@ -374,6 +416,9 @@ func InitRatioSettings() {
 	audioCompletionRatioMapMutex.Lock()
 	audioCompletionRatioMap = defaultAudioCompletionRatio
 	audioCompletionRatioMapMutex.Unlock()
+
+	// Initialize paramRatioConfig
+	InitParamRatioSettings()
 }
 
 func GetModelPriceMap() map[string]float64 {

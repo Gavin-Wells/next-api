@@ -20,6 +20,7 @@ type PriceData struct {
 	ImageRatio           float64
 	AudioRatio           float64
 	AudioCompletionRatio float64
+	ParamRatio           float64 // 参数倍率（基于请求参数的倍率乘数）
 	OtherRatios          map[string]float64
 	UsePrice             bool
 	QuotaToPreConsume    int // 预消耗额度
@@ -39,6 +40,7 @@ func (p *PriceData) AddOtherRatio(key string, ratio float64) {
 type PerCallPriceData struct {
 	ModelPrice     float64
 	Quota          int
+	ParamRatio     float64 // 参数倍率（基于请求参数的倍率乘数）
 	GroupRatioInfo GroupRatioInfo
 }
 

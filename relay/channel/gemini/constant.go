@@ -21,6 +21,7 @@ var ModelList = []string{
 	"gemini-2.5-pro-preview-03-25",
 	// imagen models
 	"imagen-3.0-generate-002",
+	"nano-banana-pro-all",
 	// embedding models
 	"gemini-embedding-exp-03-07",
 	"text-embedding-004",

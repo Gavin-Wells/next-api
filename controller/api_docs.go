@@ -215,11 +215,30 @@ func buildImageEndpoint(enabledModels []string) EndpointInfo {
 	// 从已启用的模型中获取图像模型
 	for _, m := range enabledModels {
 		if isImageModel(strings.ToLower(m)) {
-			models = append(models, ModelInfo{
+			vendor := guessVendorFromModel(m)
+			modelInfo := ModelInfo{
 				ID:     m,
 				Name:   m,
-				Vendor: guessVendorFromModel(m),
-			})
+				Vendor: vendor,
+			}
+
+			// 为不同厂商的模型添加特定的参数说明
+			modelLower := strings.ToLower(m)
+			if strings.Contains(modelLower, "seedream") {
+				// 豆包 Seedream 模型参数
+				modelInfo.Parameters = buildSeedreamImageParameters()
+			} else if strings.Contains(modelLower, "dall-e") {
+				// OpenAI DALL-E 模型参数
+				modelInfo.Parameters = buildDALLEImageParameters()
+			} else if strings.Contains(modelLower, "imagen") {
+				// Google Imagen 模型参数
+				modelInfo.Parameters = buildImagenImageParameters()
+			} else {
+				// 通用图像生成参数
+				modelInfo.Parameters = buildGenericImageParameters()
+			}
+
+			models = append(models, modelInfo)
 		}
 	}
 
@@ -249,6 +268,69 @@ func buildImageEndpoint(enabledModels []string) EndpointInfo {
 	}
 }
 
+// buildGenericImageParameters 构建通用图像生成参数
+func buildGenericImageParameters() []ParamInfo {
+	return []ParamInfo{
+		{Name: "model", Type: "string", Required: true, Description: "模型名称"},
+		{Name: "prompt", Type: "string", Required: true, Description: "图像描述提示词"},
+		{Name: "n", Type: "integer", Required: false, Default: 1, Description: "生成图片数量，默认1"},
+		{Name: "size", Type: "string", Required: false, Default: "1024x1024", Description: "图片尺寸，如 1024x1024"},
+		{Name: "quality", Type: "string", Required: false, Default: "standard", Options: []string{"standard", "hd"}, Description: "图片质量"},
+		{Name: "response_format", Type: "string", Required: false, Default: "url", Options: []string{"url", "b64_json"}, Description: "响应格式，url 返回图片URL，b64_json 返回Base64编码"},
+		{Name: "user", Type: "string", Required: false, Description: "用户标识，用于追踪和调试"},
+	}
+}
+
+// buildSeedreamImageParameters 构建豆包 Seedream 图像生成参数
+// 参考文档: https://www.volcengine.com/docs/82379/1541523?lang=zh
+func buildSeedreamImageParameters() []ParamInfo {
+	return []ParamInfo{
+		{Name: "model", Type: "string", Required: true, Description: "模型名称，如 doubao-seedream-4-5-251128"},
+		{Name: "prompt", Type: "string", Required: true, Description: "图像描述提示词，支持中英文"},
+		{Name: "n", Type: "integer", Required: false, Default: 1, Options: []string{"1", "2", "3", "4"}, Description: "生成图片数量，范围1-4，默认1"},
+		{
+			Name:        "size",
+			Type:        "string",
+			Required:    false,
+			Default:     "2048x2048",
+			Options:     []string{"2K", "4K", "2048x2048"},
+			Description: "图片尺寸。方式1：指定分辨率 2K 或 4K（需在prompt中描述宽高比）。方式2：指定宽高像素值，需满足：总像素范围 [2560x1440=3686400, 4096x4096=16777216]，宽高比范围 [1/16, 16]。默认值：2048x2048",
+		},
+		{Name: "quality", Type: "string", Required: false, Default: "standard", Options: []string{"standard", "hd"}, Description: "图片质量，standard=标准，hd=高清"},
+		{Name: "response_format", Type: "string", Required: false, Default: "url", Options: []string{"url", "b64_json"}, Description: "响应格式，url 返回图片URL，b64_json 返回Base64编码"},
+		{Name: "seed", Type: "integer", Required: false, Description: "随机种子，范围 [0, 2147483647]，用于生成可复现的结果"},
+		{Name: "style", Type: "string", Required: false, Description: "图片风格，通过 extra_fields 传递"},
+		{Name: "user", Type: "string", Required: false, Description: "用户标识，用于追踪和调试"},
+	}
+}
+
+// buildDALLEImageParameters 构建 OpenAI DALL-E 图像生成参数
+func buildDALLEImageParameters() []ParamInfo {
+	return []ParamInfo{
+		{Name: "model", Type: "string", Required: true, Description: "模型名称，如 dall-e-3, dall-e-2"},
+		{Name: "prompt", Type: "string", Required: true, Description: "图像描述提示词，最多4000字符"},
+		{Name: "n", Type: "integer", Required: false, Default: 1, Description: "生成图片数量，dall-e-3 固定为1，dall-e-2 支持1-10"},
+		{Name: "size", Type: "string", Required: false, Default: "1024x1024", Options: []string{"256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"}, Description: "图片尺寸，dall-e-3 支持 1024x1024, 1792x1024, 1024x1792"},
+		{Name: "quality", Type: "string", Required: false, Default: "standard", Options: []string{"standard", "hd"}, Description: "图片质量，仅 dall-e-3 支持，hd 质量更高但生成时间更长"},
+		{Name: "style", Type: "string", Required: false, Default: "vivid", Options: []string{"vivid", "natural"}, Description: "图片风格，仅 dall-e-3 支持，vivid=生动，natural=自然"},
+		{Name: "response_format", Type: "string", Required: false, Default: "url", Options: []string{"url", "b64_json"}, Description: "响应格式"},
+		{Name: "user", Type: "string", Required: false, Description: "用户标识"},
+	}
+}
+
+// buildImagenImageParameters 构建 Google Imagen 图像生成参数
+func buildImagenImageParameters() []ParamInfo {
+	return []ParamInfo{
+		{Name: "model", Type: "string", Required: true, Description: "模型名称，如 imagen-3.0-generate-002"},
+		{Name: "prompt", Type: "string", Required: true, Description: "图像描述提示词"},
+		{Name: "n", Type: "integer", Required: false, Default: 1, Description: "生成图片数量"},
+		{Name: "size", Type: "string", Required: false, Default: "1024x1024", Options: []string{"256x256", "512x512", "1024x1024", "1536x1024", "1024x1536", "1024x1792", "1792x1024"}, Description: "图片尺寸"},
+		{Name: "quality", Type: "string", Required: false, Options: []string{"1K", "2K"}, Description: "图片质量，1K=标准，2K=高清"},
+		{Name: "response_format", Type: "string", Required: false, Default: "url", Options: []string{"url", "b64_json"}, Description: "响应格式"},
+		{Name: "user", Type: "string", Required: false, Description: "用户标识"},
+	}
+}
+
 // buildVideoEndpoint 构建视频生成端点配置
 func buildVideoEndpoint(enabledModelSet map[string]struct{}) EndpointInfo {
 	models := []ModelInfo{}
@@ -269,25 +351,31 @@ func buildVideoEndpoint(enabledModelSet map[string]struct{}) EndpointInfo {
 
 		// 动态构建参数列表
 		params := []ParamInfo{
-			{Name: "prompt", Type: "string", Required: false, Description: "视频描述，支持[指令]运镜控制"},
-			{Name: "duration", Type: "integer", Required: false, Default: hailuo.DefaultDuration, Options: intsToStrings(config.SupportedDurations), Description: "视频时长(秒)"},
-			{Name: "resolution", Type: "string", Required: false, Default: config.DefaultResolution, Options: config.SupportedResolutions, Description: "分辨率 (首尾帧不支持512P)"},
+			{Name: "prompt", Type: "string", Required: false, Description: "视频描述，支持使用 [指令] 格式控制运镜，如 [推进]、[拉远]、[环绕]"},
+			{Name: "duration", Type: "integer", Required: false, Default: hailuo.DefaultDuration, Options: intsToStrings(config.SupportedDurations), Description: "视频时长(秒)，1080P 仅支持 6 秒"},
+			{Name: "resolution", Type: "string", Required: false, Default: config.DefaultResolution, Options: config.SupportedResolutions, Description: "分辨率"},
 		}
-		// 首帧图片 (I2V 和 MiniMax-Hailuo-02 支持)
+		// 首帧图片 (I2V 和 MiniMax-Hailuo-02/2.3 支持)
 		if isI2V || m == "MiniMax-Hailuo-02" || m == "MiniMax-Hailuo-2.3" {
-			params = append(params, ParamInfo{Name: "first_frame", Type: "string", Required: false, Description: "首帧图片URL"})
+			params = append(params, ParamInfo{Name: "first_frame", Type: "string", Required: false, Description: "首帧图片URL (图生视频模式)"})
 		}
 		// 尾帧图片 (MiniMax-Hailuo-02 支持首尾帧)
 		if m == "MiniMax-Hailuo-02" {
-			params = append(params, ParamInfo{Name: "last_frame", Type: "string", Required: false, Description: "尾帧图片URL (首尾帧生成)"})
+			params = append(params, ParamInfo{Name: "last_frame", Type: "string", Required: false, Description: "尾帧图片URL (首尾帧模式需同时提供首帧)"})
 		}
 		// 主体参考 (S2V 模型支持)
 		if isS2V {
-			params = append(params, ParamInfo{Name: "subject_reference", Type: "array", Required: false, Description: "主体参考图片URL列表"})
+			params = append(params, ParamInfo{Name: "subject_reference", Type: "array", Required: false, Description: "主体参考图片URL列表 (主体参考生成模式)"})
+		}
+		// 可选参数
+		if config.HasPromptOptimizer {
+			params = append(params, ParamInfo{Name: "prompt_optimizer", Type: "boolean", Required: false, Default: true, Description: "是否启用智能提示词优化"})
+		}
+		if config.HasFastPretreatment {
+			params = append(params, ParamInfo{Name: "fast_pretreatment", Type: "boolean", Required: false, Default: false, Description: "是否启用快速预处理（可能影响质量）"})
 		}
 		params = append(params,
-			ParamInfo{Name: "prompt_optimizer", Type: "boolean", Required: false, Default: true, Description: "是否优化提示词"},
-			ParamInfo{Name: "aigc_watermark", Type: "boolean", Required: false, Default: false, Description: "是否添加水印"},
+			ParamInfo{Name: "aigc_watermark", Type: "boolean", Required: false, Default: false, Description: "是否添加 AIGC 水印"},
 		)
 
 		models = append(models, ModelInfo{
@@ -326,29 +414,36 @@ func buildVideoEndpoint(enabledModelSet map[string]struct{}) EndpointInfo {
 		}
 		// 动态构建参数列表
 		params := []ParamInfo{
-			{Name: "prompt", Type: "string", Required: false, Description: "视频描述（文生视频时必填）"},
+			{Name: "prompt", Type: "string", Required: false, Description: "视频描述（文生视频时必填），支持使用 [指令] 格式控制运镜"},
 			{Name: "duration", Type: "integer", Required: false, Default: config.DefaultDuration, Options: intsToStrings(config.SupportedDurations), Description: "视频时长(秒)"},
 			{Name: "resolution", Type: "string", Required: false, Default: config.DefaultResolution, Options: config.SupportedResolutions, Description: "分辨率"},
 			{Name: "aspect_ratio", Type: "string", Required: false, Default: config.DefaultRatio, Options: config.SupportedRatios, Description: "宽高比"},
 		}
 		// 根据模型能力添加首帧参数
 		if config.SupportsFirstFrame {
-			params = append(params, ParamInfo{Name: "first_frame", Type: "string", Required: false, Description: "首帧图片URL"})
+			params = append(params, ParamInfo{Name: "first_frame", Type: "string", Required: false, Description: "首帧图片URL (图生视频模式)"})
 		}
 		// 根据模型能力添加尾帧参数
 		if config.SupportsLastFrame {
-			params = append(params, ParamInfo{Name: "last_frame", Type: "string", Required: false, Description: "尾帧图片URL（首尾帧生成时使用）"})
+			params = append(params, ParamInfo{Name: "last_frame", Type: "string", Required: false, Description: "尾帧图片URL (首尾帧模式需同时提供首帧)"})
 		}
 		// 图生视频模型支持参考图
 		if config.ModelType == "image2video" {
-			params = append(params, ParamInfo{Name: "images", Type: "array", Required: false, Description: "参考图片URL列表（1-4张）"})
+			params = append(params, ParamInfo{Name: "images", Type: "array", Required: false, Description: "参考图片URL列表（1-4张），图生视频模式使用"})
 		}
 		// 根据模型能力添加音频参数
 		if config.SupportsAudio {
-			params = append(params, ParamInfo{Name: "generate_audio", Type: "boolean", Required: false, Default: false, Description: "是否生成音频"})
+			params = append(params, ParamInfo{Name: "generate_audio", Type: "boolean", Required: false, Default: false, Description: "是否生成背景音乐和音效"})
+		}
+		// cfg_scale 和 fps 参数
+		if config.SupportsCfgScale {
+			params = append(params, ParamInfo{Name: "cfg_scale", Type: "number", Required: false, Default: 6.0, Description: "提示词相关度，范围 [1, 10]，值越大越遵循提示词"})
+		}
+		if config.SupportsFps {
+			params = append(params, ParamInfo{Name: "fps", Type: "integer", Required: false, Default: 24, Options: []string{"16", "24"}, Description: "视频帧率"})
 		}
 		// 通用参数
-		params = append(params, ParamInfo{Name: "seed", Type: "integer", Required: false, Description: "随机种子"})
+		params = append(params, ParamInfo{Name: "seed", Type: "integer", Required: false, Description: "随机种子，用于复现生成结果"})
 
 		models = append(models, ModelInfo{
 			ID:                   m,
@@ -377,17 +472,19 @@ func buildVideoEndpoint(enabledModelSet map[string]struct{}) EndpointInfo {
 			ID:                 m,
 			Name:               m,
 			Vendor:             "Kling (快手)",
-			Type:               "text-to-video",
+			Type:               "text-to-video (支持图生视频)",
 			SupportedDurations: []int{5, 10},
 			SupportedRatios:    []string{"1:1", "16:9", "9:16"},
 			SupportsFirstFrame: true,
 			Parameters: []ParamInfo{
-				{Name: "prompt", Type: "string", Required: true, Description: "视频描述"},
+				{Name: "prompt", Type: "string", Required: true, Description: "视频描述，详细的场景和动作描述效果更好"},
 				{Name: "duration", Type: "integer", Required: false, Default: 5, Options: []string{"5", "10"}, Description: "视频时长(秒)"},
-				{Name: "aspect_ratio", Type: "string", Required: false, Default: "1:1", Options: []string{"1:1", "16:9", "9:16"}, Description: "宽高比"},
-				{Name: "mode", Type: "string", Required: false, Default: "std", Options: []string{"std", "pro"}, Description: "生成模式"},
-				{Name: "negative_prompt", Type: "string", Required: false, Description: "反向提示词"},
-				{Name: "first_frame", Type: "string", Required: false, Description: "首帧图片(图生视频)"},
+				{Name: "aspect_ratio", Type: "string", Required: false, Default: "16:9", Options: []string{"1:1", "16:9", "9:16"}, Description: "宽高比"},
+				{Name: "mode", Type: "string", Required: false, Default: "std", Options: []string{"std", "pro"}, Description: "生成模式，std=标准模式（快速），pro=专业模式（高质量）"},
+				{Name: "first_frame", Type: "string", Required: false, Description: "首帧图片URL (图生视频模式)"},
+				{Name: "negative_prompt", Type: "string", Required: false, Description: "反向提示词，描述不希望出现的内容"},
+				{Name: "cfg_scale", Type: "number", Required: false, Default: 0.5, Description: "提示词相关度，范围 [0, 1]"},
+				{Name: "seed", Type: "integer", Required: false, Description: "随机种子，用于复现生成结果"},
 			},
 		})
 	}
@@ -678,7 +775,7 @@ func isVideoModel(model string) bool {
 }
 
 func isImageModel(model string) bool {
-	imageKeywords := []string{"dall-e", "dalle", "midjourney", "mj_", "mj-", "mj", "imagine", "stable-diffusion", "sd-", "imagen", "jimeng", "cogview"}
+	imageKeywords := []string{"dall-e", "dalle", "midjourney", "mj_", "mj-", "mj", "imagine", "stable-diffusion", "sd-", "imagen", "jimeng", "cogview", "seedream", "banana"}
 	for _, kw := range imageKeywords {
 		if strings.Contains(model, kw) {
 			return true

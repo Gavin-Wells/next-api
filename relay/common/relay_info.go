@@ -508,7 +508,9 @@ type TaskRelayInfo struct {
 	Action       string
 	OriginTaskID string
 
-	ConsumeQuota bool
+	ConsumeQuota  bool
+	TaskRequest   *TaskSubmitReq                 // 解析后的任务请求参数
+	RequestParams map[string]interface{}         // 参数 map，用于参数倍率计算
 }
 
 type TaskSubmitReq struct {
@@ -700,6 +702,78 @@ func (t *TaskSubmitReq) GetGenerateAudio(defaultValue bool) bool {
 		return *t.GenerateAudio
 	}
 	return defaultValue
+}
+
+// ToParamsMap 将请求参数转换为 map，用于参数倍率计算
+func (t *TaskSubmitReq) ToParamsMap() map[string]interface{} {
+	params := make(map[string]interface{})
+
+	// 基础参数
+	if t.Model != "" {
+		params["model"] = t.Model
+	}
+
+	// 时长参数
+	if t.Duration > 0 {
+		params["duration"] = t.Duration
+	} else if t.Seconds != "" {
+		params["seconds"] = t.Seconds
+		if d, err := strconv.Atoi(t.Seconds); err == nil {
+			params["duration"] = d
+		}
+	}
+
+	// 尺寸/分辨率参数
+	if t.Size != "" {
+		params["size"] = t.Size
+	}
+	if t.Resolution != "" {
+		params["resolution"] = t.Resolution
+	}
+	if t.AspectRatio != "" {
+		params["aspect_ratio"] = t.AspectRatio
+	}
+
+	// 帧率
+	if t.Fps > 0 {
+		params["fps"] = t.Fps
+	}
+
+	// 生成控制
+	if t.N > 0 {
+		params["n"] = t.N
+	}
+	if t.Mode != "" {
+		params["mode"] = t.Mode
+	}
+	if t.CfgScale > 0 {
+		params["cfg_scale"] = t.CfgScale
+	}
+
+	// 提示词优化
+	if t.PromptOptimizer != nil {
+		params["prompt_optimizer"] = *t.PromptOptimizer
+	}
+
+	// 音频参数
+	if t.GenerateAudio != nil {
+		params["generate_audio"] = *t.GenerateAudio
+	}
+
+	// 图片参数（用于判断图生视频还是文生视频）
+	if t.FirstFrame != "" || t.Image != "" || len(t.Images) > 0 {
+		params["has_image"] = true
+	}
+	if t.LastFrame != "" {
+		params["has_last_frame"] = true
+	}
+
+	// 合并 metadata 中的参数
+	for k, v := range t.Metadata {
+		params[k] = v
+	}
+
+	return params
 }
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {

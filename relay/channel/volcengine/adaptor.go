@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	channelconstant "github.com/QuantumNous/new-api/constant"
@@ -104,9 +106,28 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 	return bytes.NewReader(jsonData), nil
 }
 
+// SeedreamImageRequest 豆包 Seedream 图片生成请求结构
+// 参考文档: https://www.volcengine.com/docs/82379/1541523?lang=zh
+type SeedreamImageRequest struct {
+	Model          string  `json:"model"`                      // 模型名称
+	Prompt         string  `json:"prompt"`                      // 提示词（必需）
+	N              *int    `json:"n,omitempty"`                 // 生成图片数量，默认1，范围1-4
+	Size           *string `json:"size,omitempty"`              // 图片尺寸，如 "1024x1024", "1024x1792", "1792x1024"
+	Quality        *string `json:"quality,omitempty"`             // 图片质量，如 "standard", "hd"
+	ResponseFormat *string `json:"response_format,omitempty"`   // 响应格式，"url" 或 "b64_json"，默认 "url"
+	Seed           *int    `json:"seed,omitempty"`              // 随机种子，范围 [0, 2147483647]
+	Style          *string `json:"style,omitempty"`              // 图片风格
+	User           *string `json:"user,omitempty"`               // 用户标识
+}
+
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	switch info.RelayMode {
 	case constant.RelayModeImagesGenerations:
+		// 检查是否是 Seedream 模型
+		modelLower := strings.ToLower(request.Model)
+		if strings.Contains(modelLower, "seedream") {
+			return a.convertToSeedreamRequest(request)
+		}
 		return request, nil
 	// 根据官方文档,并没有发现豆包生图支持表单请求:https://www.volcengine.com/docs/82379/1824121
 	//case constant.RelayModeImagesEdits:
@@ -400,4 +421,236 @@ func (a *Adaptor) GetModelList() []string {
 
 func (a *Adaptor) GetChannelName() string {
 	return ChannelName
+}
+
+// convertToSeedreamRequest 将 OpenAI 格式的图片生成请求转换为豆包 Seedream 格式
+// 参考文档: https://www.volcengine.com/docs/82379/1541523?lang=zh
+func (a *Adaptor) convertToSeedreamRequest(request dto.ImageRequest) (*SeedreamImageRequest, error) {
+	seedreamReq := &SeedreamImageRequest{
+		Model:  request.Model,
+		Prompt: request.Prompt,
+	}
+
+	// 映射 n 参数（生成数量）
+	if request.N > 0 {
+		n := int(request.N)
+		// 限制范围 1-4
+		if n >= 1 && n <= 4 {
+			seedreamReq.N = &n
+		} else if n > 4 {
+			n = 4
+			seedreamReq.N = &n
+		}
+	}
+
+	// 映射 size 参数
+	if request.Size != "" {
+		size := a.convertSizeToSeedreamFormat(request.Size)
+		if size != "" {
+			seedreamReq.Size = &size
+		}
+	}
+
+	// 映射 quality 参数
+	if request.Quality != "" {
+		quality := a.convertQualityToSeedreamFormat(request.Quality)
+		if quality != "" {
+			seedreamReq.Quality = &quality
+		}
+	}
+
+	// 映射 response_format 参数
+	if request.ResponseFormat != "" {
+		format := request.ResponseFormat
+		// 确保格式为 "url" 或 "b64_json"
+		if format == "url" || format == "b64_json" {
+			seedreamReq.ResponseFormat = &format
+		} else {
+			// 默认使用 "url"
+			defaultFormat := "url"
+			seedreamReq.ResponseFormat = &defaultFormat
+		}
+	} else {
+		// 默认使用 "url"
+		defaultFormat := "url"
+		seedreamReq.ResponseFormat = &defaultFormat
+	}
+
+	// 从 ExtraFields 中提取 seed 和其他参数
+	if len(request.ExtraFields) > 0 {
+		var extraFields map[string]interface{}
+		if err := json.Unmarshal(request.ExtraFields, &extraFields); err == nil {
+			// 提取 seed
+			if seedVal, ok := extraFields["seed"]; ok {
+				if seedFloat, ok := seedVal.(float64); ok {
+					seed := int(seedFloat)
+					if seed >= 0 && seed <= 2147483647 {
+						seedreamReq.Seed = &seed
+					}
+				} else if seedInt, ok := seedVal.(int); ok {
+					if seedInt >= 0 && seedInt <= 2147483647 {
+						seedreamReq.Seed = &seedInt
+					}
+				}
+			}
+
+			// 提取 style
+			if styleVal, ok := extraFields["style"]; ok {
+				if style, ok := styleVal.(string); ok && style != "" {
+					seedreamReq.Style = &style
+				}
+			}
+
+			// 提取 user
+			if userVal, ok := extraFields["user"]; ok {
+				if user, ok := userVal.(string); ok && user != "" {
+					seedreamReq.User = &user
+				}
+			}
+
+			// 如果 ExtraFields 中有 size，优先使用
+			if sizeVal, ok := extraFields["size"]; ok {
+				if size, ok := sizeVal.(string); ok && size != "" {
+					convertedSize := a.convertSizeToSeedreamFormat(size)
+					if convertedSize != "" {
+						seedreamReq.Size = &convertedSize
+					}
+				}
+			}
+
+			// 如果 ExtraFields 中有 quality，优先使用
+			if qualityVal, ok := extraFields["quality"]; ok {
+				if quality, ok := qualityVal.(string); ok && quality != "" {
+					convertedQuality := a.convertQualityToSeedreamFormat(quality)
+					if convertedQuality != "" {
+						seedreamReq.Quality = &convertedQuality
+					}
+				}
+			}
+		}
+	}
+
+	// 从 Style 字段提取（如果存在）
+	if len(request.Style) > 0 {
+		var style string
+		if err := json.Unmarshal(request.Style, &style); err == nil && style != "" {
+			seedreamReq.Style = &style
+		}
+	}
+
+	// 从 User 字段提取（如果存在）
+	if len(request.User) > 0 {
+		var user string
+		if err := json.Unmarshal(request.User, &user); err == nil && user != "" {
+			seedreamReq.User = &user
+		}
+	}
+
+	return seedreamReq, nil
+}
+
+// convertSizeToSeedreamFormat 将 OpenAI 格式的 size 转换为豆包 Seedream 格式
+// 参考文档: https://www.volcengine.com/docs/82379/1541523?lang=zh
+// 支持两种方式：
+// 方式 1: 指定分辨率 "2K" 或 "4K"
+// 方式 2: 指定宽高像素值，需满足：
+//   - 总像素范围: [2560x1440=3686400, 4096x4096=16777216]
+//   - 宽高比范围: [1/16, 16]
+//   - 默认值: 2048x2048
+func (a *Adaptor) convertSizeToSeedreamFormat(size string) string {
+	size = strings.TrimSpace(size)
+	if size == "" {
+		// 返回默认值
+		return "2048x2048"
+	}
+	
+	// 转换为大写以便匹配
+	sizeUpper := strings.ToUpper(size)
+	
+	// 方式 1: 检查是否是分辨率格式（2K 或 4K）
+	if sizeUpper == "2K" || sizeUpper == "4K" {
+		return sizeUpper
+	}
+	
+	// 方式 2: 解析宽高像素值格式 "WIDTHxHEIGHT"
+	if matched, _ := regexp.MatchString(`^\d+x\d+$`, size); matched {
+		// 验证尺寸是否符合要求
+		if a.isValidSeedreamSize(size) {
+			return size
+		}
+		// 如果不符合要求，返回默认值
+		return "2048x2048"
+	}
+	
+	// 如果格式不匹配，返回默认值
+	return "2048x2048"
+}
+
+// isValidSeedreamSize 验证尺寸是否符合豆包 Seedream 的要求
+// 需要同时满足：
+// 1. 总像素范围: [2560x1440=3686400, 4096x4096=16777216]
+// 2. 宽高比范围: [1/16, 16]
+func (a *Adaptor) isValidSeedreamSize(size string) bool {
+	parts := strings.Split(size, "x")
+	if len(parts) != 2 {
+		return false
+	}
+	
+	width, err1 := strconv.Atoi(parts[0])
+	height, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	
+	if width <= 0 || height <= 0 {
+		return false
+	}
+	
+	// 计算总像素
+	totalPixels := width * height
+	
+	// 验证总像素范围: [3686400, 16777216]
+	minPixels := 2560 * 1440 // 3686400
+	maxPixels := 4096 * 4096 // 16777216
+	
+	if totalPixels < minPixels || totalPixels > maxPixels {
+		return false
+	}
+	
+	// 计算宽高比
+	aspectRatio := float64(width) / float64(height)
+	
+	// 验证宽高比范围: [1/16, 16]
+	minAspectRatio := 1.0 / 16.0 // 0.0625
+	maxAspectRatio := 16.0
+	
+	if aspectRatio < minAspectRatio || aspectRatio > maxAspectRatio {
+		return false
+	}
+	
+	return true
+}
+
+// convertQualityToSeedreamFormat 将 OpenAI 格式的 quality 转换为豆包 Seedream 格式
+// OpenAI 格式: "standard", "hd" (for dall-e-3)
+// Seedream 格式: "standard", "hd"
+func (a *Adaptor) convertQualityToSeedreamFormat(quality string) string {
+	quality = strings.TrimSpace(strings.ToLower(quality))
+	
+	// 质量映射
+	qualityMap := map[string]string{
+		"standard": "standard",
+		"hd":       "hd",
+		"high":     "hd",      // 兼容 high
+		"medium":   "standard", // 兼容 medium
+		"low":      "standard", // 兼容 low
+		"auto":     "standard", // 兼容 auto
+	}
+	
+	if converted, ok := qualityMap[quality]; ok {
+		return converted
+	}
+	
+	// 默认返回空字符串，使用 API 默认值
+	return ""
 }
